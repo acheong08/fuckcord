@@ -5,6 +5,7 @@ import (
 	"discordrpc/typings"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -46,14 +47,16 @@ func startDiscordRpc(ctx context.Context, token string) func(typings.Activity) e
 			if v.S != nil {
 				seq = v.S
 			}
-			if v.Op == 11 {
-				log.Println("Heartbeat ACK")
-			}
 		}
 	}()
 	return func(activity typings.Activity) error {
 		activity.Name = "🔥🔥🔥🔥"
-		activity.FetchExternalAssets(token)
+		err := activity.FetchExternalAssets(token)
+		if err != nil {
+			activity.Assets.LargeImage = typings.DefaultCover()
+		}
+		log.Println(activity.Details)
+		log.Println(strings.Split(activity.Assets.LargeImage, "https/")[1])
 		return wsjson.Write(ctx, discordRpc, map[string]any{
 			"op": 3, "d": map[string]any{
 				"status":     "dnd",

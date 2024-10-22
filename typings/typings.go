@@ -77,19 +77,27 @@ func init() {
 	externalAssetCache = make(map[string]string)
 }
 
-func (a *Activity) FetchExternalAssets(token string) {
+func DefaultCover() string {
+	return "mp:external/MWL7VFP_X2f_X42rowD74F-GFt0J-E-fg_MzMOd3gPo/https/tmp.duti.dev/9lana.jpg"
+}
+
+func (a *Activity) FetchExternalAssets(token string) error {
+	if strings.HasPrefix(a.Assets.SmallText, "https://www.youtube.com") {
+		ytId := strings.TrimPrefix(a.Assets.SmallText, "https://www.youtube.com/watch?v=")
+		a.Assets.LargeImage = fmt.Sprintf("https://iv.duti.dev/vi/%s/hqdefault.jpg", ytId)
+	}
+	if strings.HasSuffix(a.Assets.SmallText, ".m4a") {
+		ytId := strings.TrimSuffix(a.Assets.SmallText, ".m4a")
+		a.Assets.LargeImage = fmt.Sprintf("https://iv.duti.dev/vi/%s/hqdefault.jpg", ytId)
+	}
 	if a.Assets.LargeImage == "" {
-		a.Assets.LargeImage = "mp:external/MWL7VFP_X2f_X42rowD74F-GFt0J-E-fg_MzMOd3gPo/https/tmp.duti.dev/9lana.jpg"
-		return
+		a.Assets.LargeImage = DefaultCover()
+		return nil
 	}
 	a.Assets.SmallImage = "mp:external/QoXN7gKtL2gQl37wtzCLCKv43y8WYtRiCbakNm2T5CU/https/i.imgur.com/8IYhOc2.png"
 	if largeImage, ok := externalAssetCache[a.Assets.LargeImage]; ok {
 		a.Assets.LargeImage = largeImage
-		return
-	}
-	if strings.HasPrefix(a.Assets.SmallText, "https://www.youtube.com") {
-		ytId := strings.TrimPrefix(a.Assets.SmallText, "https://www.youtube.com/watch?v=")
-		a.Assets.LargeImage = fmt.Sprintf("https://iv.duti.dev/vi/%s/maxres.jpg", ytId)
+		return nil
 	}
 	reqBody := map[string][]string{
 		"urls": {
@@ -103,19 +111,20 @@ func (a *Activity) FetchExternalAssets(token string) {
 	req.Header.Set("Authorization", token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		panic("Failed to fetch external assets")
+		return fmt.Errorf("failed to fetch external assets: %d", resp.StatusCode)
 	}
 	var externalAssets []externalAsset
 	if err := json.NewDecoder(resp.Body).Decode(&externalAssets); err != nil {
-		panic(err)
+		return err
 	}
 	largeExternalAsset := "mp:" + externalAssets[0].ExternalAssetPath
 	externalAssetCache[a.Assets.LargeImage] = largeExternalAsset
 	a.Assets.LargeImage = largeExternalAsset
+	return nil
 }
 
 func InitData(token string) string {
