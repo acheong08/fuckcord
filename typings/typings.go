@@ -89,7 +89,7 @@ func (a *Activity) FetchExternalAssets(token string) {
 	}
 	if strings.HasPrefix(a.Assets.SmallText, "https://www.youtube.com") {
 		ytId := strings.TrimPrefix(a.Assets.SmallText, "https://www.youtube.com/watch?v=")
-		a.Assets.LargeImage = fmt.Sprintf("https://i.ytimg.com/vi/%s/maxresdefault.jpg", ytId)
+		a.Assets.LargeImage = fmt.Sprintf("https://iv.duti.dev/vi/%s/maxres.jpg", ytId)
 	}
 	reqBody := map[string][]string{
 		"urls": {
