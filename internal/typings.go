@@ -1,4 +1,4 @@
-package typings
+package internal
 
 import (
 	"bytes"
@@ -50,6 +50,16 @@ type externalAsset struct {
 	Url               string `json:"url"`
 	ExternalAssetPath string `json:"external_asset_path"`
 }
+type Party struct {
+	Id      string `json:"id"`
+	Privacy int    `json:"privacy"`
+	Size    []int  `json:"size"`
+}
+type Secrets struct {
+	Join     string `json:"join"`
+	Spectate string `json:"spectate"`
+	Match    string `json:"match"`
+}
 
 type Activity struct {
 	ApplicationId string   `json:"application_id"`
@@ -68,7 +78,10 @@ type Activity struct {
 		Start int64 `json:"start"`
 		End   int64 `json:"end"`
 	} `json:"timestamps"`
-	Name string `json:"name"`
+	Name               string   `json:"name"`
+	Party              Party    `json:"party"`
+	Secrets            Secrets  `json:"secrets"`
+	SupportedPlatforms []string `json:"supported_platforms"`
 }
 
 var externalAssetCache map[string]string

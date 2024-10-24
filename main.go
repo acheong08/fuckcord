@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"discordrpc/typings"
+	"discordrpc/internal"
 	"log"
 	"os"
 	"strings"
@@ -12,59 +12,119 @@ import (
 	"github.com/coder/websocket/wsjson"
 )
 
-func startDiscordRpc(ctx context.Context, token string) func(typings.Activity) error {
-	discordRpc, _, err := websocket.Dial(ctx, "wss://gateway.discord.gg/?encoding=json&v=9", nil)
-	discordRpc.SetReadLimit(128 * 1024 * 1024) // 128 MB
+type WsWrapper struct {
+	ws        *websocket.Conn
+	seq       *int
+	parentCtx context.Context
+	ctx       context.Context
+	cancel    *context.CancelFunc
+	token     string
+}
+
+func (w *WsWrapper) init() {
+	ctx, cancel := context.WithCancel(w.parentCtx)
+	if w.cancel != nil {
+		(*w.cancel)()
+	}
+	w.ctx = ctx
+	w.cancel = &cancel
+	if w.token == "" {
+		panic("No token provided")
+	}
+	var err error
+	w.ws, _, err = websocket.Dial(w.ctx, "wss://gateway.discord.gg/?encoding=json&v=9", nil)
 	if err != nil {
 		panic(err)
 	}
-	err = discordRpc.Write(ctx, websocket.MessageText, []byte(typings.InitData(token)))
+	w.ws.SetReadLimit(128 * 1024 * 1024) // 128 MB
+	err = w.ws.Write(w.ctx, websocket.MessageText, []byte(internal.InitData(w.token)))
 	if err != nil {
 		panic(err)
 	}
-	var seq *int = nil
-	go func() {
-		for {
-			if err := wsjson.Write(ctx, discordRpc, map[string]any{
-				"op": 1,
-				"d":  seq,
-			}); err != nil {
-				panic(err)
+	w.seq = nil
+	go w.readLoop()
+	go w.pingLoop()
+}
+
+func (w *WsWrapper) readLoop() {
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		default:
+			var v struct {
+				Op int  `json:"op"`
+				S  *int `json:"s"`
 			}
-			time.Sleep(41250 * time.Millisecond)
-		}
-	}()
-	type genericResponse struct {
-		Op int  `json:"op"`
-		S  *int `json:"s"`
-	}
-	go func() {
-		for {
-			var v genericResponse
-			if err := wsjson.Read(ctx, discordRpc, &v); err != nil {
-				panic(err)
+			if err := wsjson.Read(w.ctx, w.ws, &v); err != nil {
+				log.Println(err)
+				w.init()
+				return
 			}
 			if v.S != nil {
-				seq = v.S
+				w.seq = v.S
 			}
 		}
-	}()
-	return func(activity typings.Activity) error {
+	}
+}
+
+func (w *WsWrapper) pingLoop() {
+	const interval = 41250 * time.Millisecond
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		case <-time.After(interval):
+			if err := wsjson.Write(w.ctx, w.ws, map[string]any{
+				"op": 1,
+				"d":  w.seq,
+			}); err != nil {
+				log.Println(err)
+				w.init()
+				return
+			}
+		}
+	}
+}
+
+func (w *WsWrapper) Write(ctx context.Context, v interface{}) error {
+	return wsjson.Write(ctx, w.ws, v)
+}
+
+func NewWsWrapper(ctx context.Context, token string) *WsWrapper {
+	w := &WsWrapper{
+		token:     token,
+		parentCtx: ctx,
+	}
+	w.init()
+	return w
+}
+
+func startDiscordRpc(ctx context.Context, token string) func(internal.Activity) {
+	discordRpc := NewWsWrapper(ctx, token)
+
+	return func(activity internal.Activity) {
 		activity.Name = "🔥🔥🔥🔥"
+		activity.Assets.LargeImage = internal.DefaultCover()
 		err := activity.FetchExternalAssets(token)
 		if err != nil {
-			activity.Assets.LargeImage = typings.DefaultCover()
+			log.Println("Failed to fetch external assets: %w", err)
 		}
 		log.Println(activity.Details)
 		log.Println(strings.Split(activity.Assets.LargeImage, "https/")[1])
-		return wsjson.Write(ctx, discordRpc, map[string]any{
+		err = discordRpc.Write(ctx, map[string]any{
 			"op": 3, "d": map[string]any{
 				"status":     "dnd",
 				"since":      0,
-				"activities": []typings.Activity{activity},
+				"activities": []internal.Activity{activity},
 				"afk":        false,
 			},
 		})
+		if err != nil {
+			log.Println(err)
+			discordRpc.init()
+			return
+		}
 	}
 }
 
@@ -79,13 +139,11 @@ func main() {
 	}
 	for {
 		var activity struct {
-			Activity typings.Activity `json:"activity"`
+			Activity internal.Activity `json:"activity"`
 		}
 		if err := wsjson.Read(ctx, localWs, &activity); err != nil {
 			panic(err)
 		}
-		if err := discordRpc(activity.Activity); err != nil {
-			panic(err)
-		}
+		discordRpc(activity.Activity)
 	}
 }
