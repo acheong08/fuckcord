@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"discordrpc/internal"
+	"discordrpc/internal/token"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -18,7 +18,7 @@ type WsWrapper struct {
 	parentCtx context.Context
 	ctx       context.Context
 	cancel    *context.CancelFunc
-	token     string
+	user      string
 }
 
 func (w *WsWrapper) init() {
@@ -28,16 +28,13 @@ func (w *WsWrapper) init() {
 	}
 	w.ctx = ctx
 	w.cancel = &cancel
-	if w.token == "" {
-		panic("No token provided")
-	}
 	var err error
 	w.ws, _, err = websocket.Dial(w.ctx, "wss://gateway.discord.gg/?encoding=json&v=9", nil)
 	if err != nil {
 		panic(err)
 	}
 	w.ws.SetReadLimit(128 * 1024 * 1024) // 128 MB
-	err = w.ws.Write(w.ctx, websocket.MessageText, []byte(internal.InitData(w.token)))
+	err = w.ws.Write(w.ctx, websocket.MessageText, []byte(internal.InitData(token.GetToken(w.user))))
 	if err != nil {
 		panic(err)
 	}
@@ -91,22 +88,21 @@ func (w *WsWrapper) Write(ctx context.Context, v interface{}) error {
 	return wsjson.Write(ctx, w.ws, v)
 }
 
-func NewWsWrapper(ctx context.Context, token string) *WsWrapper {
+func NewWsWrapper(ctx context.Context) *WsWrapper {
 	w := &WsWrapper{
-		token:     token,
 		parentCtx: ctx,
 	}
 	w.init()
 	return w
 }
 
-func startDiscordRpc(ctx context.Context, token string) func(internal.Activity) {
-	discordRpc := NewWsWrapper(ctx, token)
+func startDiscordRpc(ctx context.Context) func(internal.Activity) {
+	discordRpc := NewWsWrapper(ctx)
 
 	return func(activity internal.Activity) {
-		activity.Name = "🔥🔥🔥🔥"
-		activity.Assets.LargeImage = internal.DefaultCover()
-		err := activity.FetchExternalAssets(token)
+		activity.Name = activity.State
+		var err error
+		activity.Assets.LargeImage, err = internal.FetchExternalAssets(activity)
 		if err != nil {
 			log.Println("Failed to fetch external assets: %w", err)
 		}
@@ -131,8 +127,7 @@ func startDiscordRpc(ctx context.Context, token string) func(internal.Activity) 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	token := os.Getenv("DISCORD_TOKEN")
-	discordRpc := startDiscordRpc(ctx, token)
+	discordRpc := startDiscordRpc(ctx)
 	localWs, _, err := websocket.Dial(ctx, "ws://127.0.0.1:1337/", nil)
 	if err != nil {
 		panic(err)
