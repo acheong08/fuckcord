@@ -73,6 +73,7 @@ type Activity struct {
 	Timestamps struct {
 		Start int64 `json:"start"`
 		End   int64 `json:"end"`
+		// UseTimer bool `json:"use_timer"`
 	} `json:"timestamps"`
 	Name               string   `json:"name"`
 	Party              Party    `json:"party"`

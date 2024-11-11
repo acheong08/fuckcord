@@ -100,15 +100,9 @@ func startDiscordRpc(ctx context.Context) func(internal.Activity) {
 	discordRpc := NewWsWrapper(ctx)
 
 	return func(activity internal.Activity) {
-		activity.Name = activity.State
-		var err error
-		activity.Assets.LargeImage, err = internal.FetchExternalAssets(activity)
-		if err != nil {
-			log.Println("Failed to fetch external assets: %w", err)
-		}
 		log.Println(activity.Details)
 		log.Println(strings.Split(activity.Assets.LargeImage, "https/")[1])
-		err = discordRpc.Write(ctx, map[string]any{
+		err := discordRpc.Write(ctx, map[string]any{
 			"op": 3, "d": map[string]any{
 				"status":     "dnd",
 				"since":      0,
@@ -128,17 +122,48 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	discordRpc := startDiscordRpc(ctx)
-	localWs, _, err := websocket.Dial(ctx, "ws://127.0.0.1:1337/", nil)
+	largeImg, err := internal.FetchExternalAssets("https://cdn.discordapp.com/app-icons/432980957394370572/c1864b38910c209afd5bf6423b672022.webp", "1297964925133783050")
 	if err != nil {
 		panic(err)
 	}
+	smImg, err := internal.FetchExternalAssets("https://static.wikia.nocookie.net/fortnite/images/6/6c/Unreal_-_Icon_-_Fortnite.png", "1297964925133783050")
+	if err != nil {
+		panic(err)
+	}
+	println(time.Now().Unix())
+
+	activity := internal.Activity{
+		ApplicationId: "1297964925133783050",
+		Type:          0,
+		Flags:         1,
+		Instance:      true,
+		State:         "Fortnite",
+		Details:       "Battle Royale",
+		Timestamps: struct {
+			Start int64 `json:"start"`
+			End   int64 `json:"end"`
+		}{
+			Start: time.Now().Add(-time.Hour + 23*time.Minute).UnixMilli(),
+			End:   time.Now().Add(time.Hour * 24).UnixMilli(),
+		},
+		Name: "Fortnite",
+		Assets: struct {
+			LargeImage string `json:"large_image"`
+			SmallImage string `json:"small_image"`
+			SmallText  string `json:"small_text"`
+		}{
+			LargeImage: largeImg,
+			SmallImage: smImg,
+			SmallText:  "Unreal Rank",
+		},
+		Party: internal.Party{
+			Id:      "ae488379-351d-4a4f-ad32-2b9b01c91657",
+			Privacy: 1,
+			Size:    []int{3, 5},
+		},
+	}
 	for {
-		var activity struct {
-			Activity internal.Activity `json:"activity"`
-		}
-		if err := wsjson.Read(ctx, localWs, &activity); err != nil {
-			panic(err)
-		}
-		discordRpc(activity.Activity)
+		discordRpc(activity)
+		time.Sleep(1 * time.Minute)
 	}
 }
