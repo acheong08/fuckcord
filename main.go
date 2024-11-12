@@ -106,6 +106,7 @@ func startDiscordRpc(ctx context.Context) func(internal.Activity) {
 		if err != nil {
 			log.Println("Failed to fetch external assets: %w", err)
 		}
+		activity.Assets.SmallImage = nil
 		log.Println(activity.Details)
 		log.Println(strings.Split(activity.Assets.LargeImage, "https/")[1])
 		err = discordRpc.Write(ctx, map[string]any{

@@ -67,7 +67,7 @@ type Activity struct {
 	Instance      bool     `json:"instance"`
 	Assets        struct {
 		LargeImage string `json:"large_image"`
-		SmallImage string `json:"small_image"`
+		SmallImage *string `json:"small_image,omitempty"`
 		SmallText  string `json:"small_text"`
 	} `json:"assets"`
 	Timestamps struct {
